@@ -7,7 +7,7 @@
 #include "cts_sysfs.h"
 #include "cts_tcs.h"
 extern struct chipone_ts_data *g_cts_data;
-#ifdef CHIPONE_SENSOR_EN
+#if defined(CHIPONE_SENSOR_EN) && !defined(CONFIG_BOARD_USES_DOUBLE_TAP_CTRL)
 static struct wakeup_source *gesture_wakelock;
 #endif
 
@@ -518,7 +518,9 @@ static irqreturn_t cts_plat_irq_handler(int irq, void *dev_id)
     if ((cts_data->cts_dev.rtdata.suspended) &&
             (cts_data->cts_dev.rtdata.gesture_wakeup_enabled)) {
         if (pdata->gesture_wait_pm) {
+#ifndef CONFIG_BOARD_USES_DOUBLE_TAP_CTRL
             PM_WAKEUP_EVENT(cts_data->gesture_wakelock, 3000);
+#endif
             /* Waiting for pm resume completed */
             ret = wait_event_interruptible_timeout(cts_data->pm_wq, atomic_read(&cts_data->pm_resume), msecs_to_jiffies(700));
             if (!ret) {
@@ -783,6 +785,9 @@ int cts_init_platform_data(struct cts_platform_data *pdata,
 #endif /* CONFIG_CTS_SLOTPROTOCOL */
     __set_bit(INPUT_PROP_DIRECT, input_dev->propbit);
     __set_bit(EV_ABS, input_dev->evbit);
+#ifdef CONFIG_BOARD_USES_DOUBLE_TAP_CTRL
+    __set_bit(KEY_WAKEUP, input_dev->keybit);
+#endif
     input_set_drvdata(input_dev, pdata);
     ret = input_register_device(input_dev);
     if (ret) {
@@ -1059,6 +1064,9 @@ void cts_report_palm_event(struct cts_platform_data *pdata)
 int cts_plat_process_touch_gesture_msg(struct cts_platform_data *pdata,
         struct cts_device_touch_msg *msgs, int num)
 {
+#ifdef CONFIG_BOARD_USES_DOUBLE_TAP_CTRL
+    return 0;
+#else
     struct chipone_ts_data *cts_data;
     struct input_dev *input_dev;
     int i;
@@ -1212,6 +1220,7 @@ int cts_plat_process_touch_gesture_msg(struct cts_platform_data *pdata,
 #endif
 
     return 0;
+#endif
 }
 #endif
 
@@ -1526,7 +1535,7 @@ int cts_plat_process_gesture_info(struct cts_platform_data *pdata,
     for (i = 0; i < CFG_CTS_NUM_GESTURE; i++) {
         if (gesture_info->gesture_id == pdata->gesture_keymap[i][0]) {
             cts_info("Report key[%u]", pdata->gesture_keymap[i][1]);
-#ifdef CHIPONE_SENSOR_EN
+#if defined(CHIPONE_SENSOR_EN) && !defined(CONFIG_BOARD_USES_DOUBLE_TAP_CTRL)
 		PM_WAKEUP_EVENT(gesture_wakelock, 5000);
 		input_report_key(g_cts_data->sensor_pdata->input_sensor_dev, pdata->gesture_keymap[i][1], 1);
 		input_sync(g_cts_data->sensor_pdata->input_sensor_dev);
