@@ -1385,7 +1385,6 @@ struct ilitek_ts_data {
 	uint8_t sys_gesture_type;
 	uint8_t rst_pull_flag;
 
-	struct mutex state_mutex;
 	struct ili_sensor_platform_data *sensor_pdata;
 #ifdef CONFIG_HAS_WAKELOCK
 	struct wake_lock gesture_wakelock;
@@ -1403,7 +1402,6 @@ struct ilitek_ts_data {
 	uint8_t sys_gesture_type;
 	uint8_t rst_pull_flag;
 #endif
-	struct mutex state_mutex;
 	struct ili_sensor_platform_data *sensor_pdata;
 #ifdef CONFIG_HAS_WAKELOCK
 	struct wake_lock gesture_wakelock;
