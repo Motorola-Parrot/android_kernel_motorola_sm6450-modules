@@ -670,6 +670,13 @@ int ts_mmi_notifiers_register(struct ts_mmi_dev *touch_cdev)
 	*/
 	touch_cdev->pm_mode = TS_MMI_PM_ACTIVE;
 
+	/*
+	The panel is already on at boot, so no display on event marks the
+	touch as powered. Without it, setting gestures before the first
+	suspend would run a full stop sequence while the panel is active.
+	*/
+	touch_cdev->touch_powered = true;
+
 	kfifo_put(&touch_cdev->cmd_pipe, TS_MMI_TASK_INIT);
 	schedule_delayed_work(&touch_cdev->work, 0);
 
