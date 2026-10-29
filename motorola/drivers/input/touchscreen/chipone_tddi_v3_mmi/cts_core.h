@@ -70,7 +70,7 @@ enum cts_dev_boot_mode {
 #define BOE_FW_REQUEST_NAME           "boe_chipone_firmware.bin"
 #define DJ_FW_REQUEST_NAME            "dj_chipone_firmware.bin"
 #define TXD_FW_REQUEST_NAME           "txd_chipone_firmware.bin"
-#define TM_FW_REQUEST_NAME            "tm_hCipone_firmware.bin"
+#define TM_FW_REQUEST_NAME            "tm_chipone_firmware.bin"
 #define INX_FW_REQUEST_NAME           "inx_chipone_firmware.bin"
 #define AUO_FW_REQUEST_NAME           "auo_chipone_firmware.bin"
 #define CSOT_FW_REQUEST_NAME          "csot_chipone_firmware.bin"
@@ -417,9 +417,7 @@ struct cts_device {
     struct cts_device_rtdata rtdata;
     const struct cts_flash *flash;
     bool enabled;
-#ifdef CFG_CTS_FW_UPDATE_FILE_LOAD
     char config_fw_name[CFG_CTS_FW_FILE_NAME_MAX_LEN + 1];
-#endif
     u8 int_data[ALIGN(CFG_CTS_INT_DATA_MAX_SIZE + 10, 4)];
 };
 
@@ -494,6 +492,9 @@ struct chipone_ts_data {
         enum display_state screen_state;
         struct mutex state_mutex;
         struct chipone_sensor_platform_data *sensor_pdata;
+#endif
+
+#if defined(CHIPONE_SENSOR_EN) || defined(TOUCHSCREEN_PM_BRL_SPI)
 #ifdef CONFIG_HAS_WAKELOCK
         struct wake_lock gesture_wakelock;
 #else

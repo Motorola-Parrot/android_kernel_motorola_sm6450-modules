@@ -39,12 +39,35 @@ static struct drm_panel *active_panel;
 static int check_dt(struct device_node *np);
 #endif
 bool cts_show_debug_log;
-#ifdef CTS_MTK_GET_PANEL
-static char *active_panel_name;
+#if defined(CTS_MTK_GET_PANEL) || defined(CTS_TP_MODULE_EN)
+static const char *active_panel_name = NULL;
 #endif
 
 #ifdef CTS_TP_MODULE_EN
-static const char *active_panel_name = NULL;
+static const char *cts_strcasestr(const char *haystack, const char *needle)
+{
+    size_t i;
+    size_t needle_len;
+    size_t haystack_len;
+
+    if (!haystack || !needle)
+        return NULL;
+
+    needle_len = strlen(needle);
+    haystack_len = strlen(haystack);
+    if (!needle_len)
+        return haystack;
+
+    if (needle_len > haystack_len)
+        return NULL;
+
+    for (i = 0; i <= haystack_len - needle_len; i++) {
+        if (strncasecmp(&haystack[i], needle, needle_len) == 0)
+            return &haystack[i];
+    }
+
+    return NULL;
+}
 #endif
 
 module_param_named(debug_log, cts_show_debug_log, bool, 0660);
@@ -415,6 +438,7 @@ static int check_dt(struct device_node *np)
     int count;
     struct device_node *node;
     struct drm_panel *panel;
+    bool has_defer = false;
 
     count = of_count_phandle_with_args(np, "panel", NULL);
     if (count <= 0)
@@ -422,49 +446,37 @@ static int check_dt(struct device_node *np)
 
     for (i = 0; i < count; i++) {
         node = of_parse_phandle(np, "panel", i);
+        if (!node)
+            continue;
+
         panel = of_drm_find_panel(node);
-        of_node_put(node);
         if (!IS_ERR(panel)) {
-            cts_info("%s check active_panel", node->name);
             active_panel = panel;
 #ifdef CTS_TP_MODULE_EN
             active_panel_name = node->name;
+            cts_info("%s check active_panel: %s", __func__, active_panel_name);
+#else
+            cts_info("%s check active_panel: %s", __func__, node->name);
 #endif
+            of_node_put(node);
             return 0;
         }
+
+        if (PTR_ERR(panel) == -EPROBE_DEFER)
+            has_defer = true;
+
+        of_node_put(node);
     }
-    if (node)
-        cts_err("%s: %s not actived", __func__, node->name);
+
+    if (has_defer) {
+        cts_info("%s: panel driver not ready yet, defer probe", __func__);
+        return -EPROBE_DEFER;
+    }
+
+    cts_err("%s: no active panel found for %s", __func__, np->name);
     return -ENODEV;
 }
 
-static int check_default_tp(struct device_node *dt, const char *prop)
-{
-    const char *active_tp;
-    const char *compatible;
-    char *start;
-    int ret;
-
-    ret = of_property_read_string(dt->parent, prop, &active_tp);
-    if (ret) {
-        cts_err("%s:fail to read %s %d", __func__, prop, ret);
-        return -ENODEV;
-    }
-
-    ret = of_property_read_string(dt, "compatible", &compatible);
-    if (ret < 0) {
-        cts_err("%s:fail to read %s %d", __func__, "compatible", ret);
-        return -ENODEV;
-    }
-
-    start = strnstr(active_tp, compatible, strlen(active_tp));
-    if (start == NULL) {
-        cts_err("no match compatible, %s, %s", compatible, active_tp);
-        ret = -ENODEV;
-    }
-
-    return ret;
-}
 #endif
 
 #ifdef CTS_MTK_GET_PANEL
@@ -682,84 +694,137 @@ static bool cts_is_charger_mode(void)
 static void cts_update_tp_module_info(void)
 {
 	int module;
+	const char *supplier_str = NULL;
+
+	if (!g_cts_data) {
+		cts_err("%s: g_cts_data is NULL", __func__);
+		return;
+	}
 
 	module = g_cts_data->tp_module;
 
 	switch (module) {
 	case MODEL_CSOT:
 		g_cts_data->config_fw_name = CSOT_FW_REQUEST_NAME;
+		supplier_str = "csot";
 		break;
 	case MODEL_AUO:
 		g_cts_data->config_fw_name = AUO_FW_REQUEST_NAME;
+		supplier_str = "auo";
 		break;
 	case MODEL_BOE:
 		g_cts_data->config_fw_name = BOE_FW_REQUEST_NAME;
+		supplier_str = "boe";
 		break;
 	case MODEL_INX:
 		g_cts_data->config_fw_name = INX_FW_REQUEST_NAME;
+		supplier_str = "inx";
 		break;
 	case MODEL_DJ:
 		g_cts_data->config_fw_name = DJ_FW_REQUEST_NAME;
+		supplier_str = "djn";
 		break;
 	case MODEL_TXD:
 		g_cts_data->config_fw_name = TXD_FW_REQUEST_NAME;
+		supplier_str = "txd";
 		break;
 	case MODEL_TM:
 		g_cts_data->config_fw_name = TM_FW_REQUEST_NAME;
+		supplier_str = "tm";
 		break;
 	default:
-		if(module) {
+		if (module) {
 			cts_info("No md info for module:%d, use default", module);
-			module = 0;
+			module = MODEL_DEF;
 		}
 		cts_info("Couldn't find any tp modules, applying default settings");
 		g_cts_data->config_fw_name = FW_REQUEST_NAME;
+		supplier_str = "default";
 		break;
 	}
 
-	cts_info("Found module: ini fw name = %s", g_cts_data->config_fw_name);
-
 	g_cts_data->tp_module = module;
+
+	if (g_cts_data->pdata && supplier_str) {
+		g_cts_data->pdata->panel_supplier = supplier_str;
+		cts_info("Set panel_supplier to '%s'", supplier_str);
+	}
+
+	cts_info("Found module %d: ini fw name = %s", module, g_cts_data->config_fw_name);
+
+	if (g_cts_data->config_fw_name)
+		strscpy(g_cts_data->cts_dev.config_fw_name, g_cts_data->config_fw_name,
+			sizeof(g_cts_data->cts_dev.config_fw_name));
 }
-
-
 
 void cts_parse_tp_module(void)
 {
-	int tp_module = 0;
+	int tp_module = MODEL_DEF;
 
 #ifdef CTS_TP_MODULE_EN
-	if(active_panel_name) {
-		if (strstr(active_panel_name, "tm") || strstr(active_panel_name, "tianma")) {
-			tp_module = MODEL_TM;
-		}
-		else if (strstr(active_panel_name, "djn")) {
-			tp_module = MODEL_DJ;
-		}
-		else if (strstr(active_panel_name, "txd")) {
-			tp_module = MODEL_TXD;
-		}
-		else if (strstr(active_panel_name, "csot")) {
-			tp_module = MODEL_CSOT;
-		}
-		else if (strstr(active_panel_name, "boe")) {
-			tp_module = MODEL_BOE;
-		}
-		else if (strstr(active_panel_name, "auo")) {
-			tp_module = MODEL_AUO;
-		}
-		else
-			cts_info("MODEL for panel:%s to be added!", active_panel_name);
+	if (!active_panel_name) {
+		static const char * const panel_props[] = {
+			"mmi,panel_name", "mmi,panel_name_s",
+		};
+		struct device_node *chosen = of_find_node_by_path("/chosen");
 
-		if (tp_module)
-			cts_info("get tp_module:%d", tp_module);
+		if (chosen) {
+			int i;
+
+			for (i = 0; i < ARRAY_SIZE(panel_props); i++) {
+				const char *pname = NULL;
+
+				if (of_property_read_string(chosen, panel_props[i], &pname) || !pname)
+					continue;
+
+				active_panel_name = pname;
+				cts_info("Got active_panel_name from /chosen %s: %s",
+					 panel_props[i], active_panel_name);
+				break;
+			}
+			of_node_put(chosen);
+		}
 	}
-	else
-		cts_info("active_panel NULL");
+
+	if (!active_panel_name && g_cts_data && g_cts_data->pdata && g_cts_data->pdata->panel_supplier) {
+		active_panel_name = g_cts_data->pdata->panel_supplier;
+		cts_info("Got active_panel_name from pdata->panel_supplier: %s", active_panel_name);
+	}
+
+	if (active_panel_name) {
+		cts_info("Parsing active_panel_name: %s", active_panel_name);
+		if (cts_strcasestr(active_panel_name, "boe")) {
+			tp_module = MODEL_BOE;
+		} else if (cts_strcasestr(active_panel_name, "csot")) {
+			tp_module = MODEL_CSOT;
+		} else if (cts_strcasestr(active_panel_name, "tianma") ||
+			   cts_strcasestr(active_panel_name, "_tm") ||
+			   cts_strcasestr(active_panel_name, "-tm") ||
+			   cts_strcasestr(active_panel_name, "tm_")) {
+			tp_module = MODEL_TM;
+		} else if (cts_strcasestr(active_panel_name, "djn") ||
+			   cts_strcasestr(active_panel_name, "_dj") ||
+			   cts_strcasestr(active_panel_name, "-dj")) {
+			tp_module = MODEL_DJ;
+		} else if (cts_strcasestr(active_panel_name, "txd")) {
+			tp_module = MODEL_TXD;
+		} else if (cts_strcasestr(active_panel_name, "auo")) {
+			tp_module = MODEL_AUO;
+		} else if (cts_strcasestr(active_panel_name, "inx")) {
+			tp_module = MODEL_INX;
+		} else {
+			cts_warn("Unknown panel supplier in active_panel_name: %s", active_panel_name);
+		}
+
+		if (tp_module != MODEL_DEF)
+			cts_info("Matched tp_module: %d for panel: %s", tp_module, active_panel_name);
+	} else {
+		cts_warn("active_panel_name is empty, unable to determine tp_module");
+	}
 #endif
 
-
-	g_cts_data->tp_module = tp_module;
+	if (g_cts_data)
+		g_cts_data->tp_module = tp_module;
 }
 
 #ifdef CONFIG_CTS_I2C_HOST
@@ -788,13 +853,9 @@ static int cts_driver_probe(struct spi_device *client)
     {
         struct device_node *dp = client->dev.of_node;
 
-        if (check_dt(dp)) {
-            if (!check_default_tp(dp, "qcom,i2c-touch-active"))
-                ret = -EPROBE_DEFER;
-            else
-                ret = -ENODEV;
-
-            cts_err("%s: %s not actived\n", __func__, dp->name);
+        ret = check_dt(dp);
+        if (ret) {
+            cts_err("%s: %s check_dt failed %d\n", __func__, dp->name, ret);
             return ret;
         }
     }
@@ -930,6 +991,13 @@ static int cts_driver_probe(struct spi_device *client)
     if (cts_data->pdata->gesture_wait_pm)
         init_waitqueue_head(&cts_data->pm_wq);
     atomic_set(&cts_data->pm_resume, 1);
+#ifndef CHIPONE_SENSOR_EN
+#ifdef CONFIG_HAS_WAKELOCK
+    wake_lock_init(&(cts_data->gesture_wakelock), WAKE_LOCK_SUSPEND, "dt-wake-lock");
+#else
+    PM_WAKEUP_REGISTER(cts_data->device, cts_data->gesture_wakelock, "dt-wake-lock");
+#endif
+#endif
 #endif
 
     cts_init_esd_protection(cts_data);
@@ -1189,7 +1257,7 @@ static int cts_i2c_driver_pm_suspend(struct device *dev)
     struct chipone_ts_data *cts_data =
     dev_get_drvdata(dev);
 
-    cts_info("Suspend by bus power management");
+    cts_dbg("Suspend by bus power management");
     atomic_set(&cts_data->pm_resume, 0);
     return 0;
 }
@@ -1199,7 +1267,7 @@ static int cts_i2c_driver_pm_resume(struct device *dev)
     struct chipone_ts_data *cts_data =
     dev_get_drvdata(dev);
 
-    cts_info("Resume by bus power management");
+    cts_dbg("Resume by bus power management");
     atomic_set(&cts_data->pm_resume, 1);
     if (cts_data->pdata->gesture_wait_pm)
         wake_up_interruptible(&cts_data->pm_wq);

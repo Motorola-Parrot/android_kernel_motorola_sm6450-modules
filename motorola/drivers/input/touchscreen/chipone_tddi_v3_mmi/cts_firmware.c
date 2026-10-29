@@ -650,8 +650,8 @@ const struct cts_firmware *cts_request_newer_firmware_from_fs(
     if (strchr(filepath, '/') != NULL) {    /* Full path */
         cts_info("Filepath is fullpath, direct read it out");
         ret = cts_request_firmware_full_filepath(firmware, filepath, curr_version);
-    } else { /* ONLY file name is givin */
-        cts_info("Filepath is only filename, use request_firmware()");
+    } else { /* ONLY file name is given */
+        cts_info("Filepath is only filename, use request_firmware() for '%s'", filepath);
         ret = cts_wrap_request_firmware(firmware, filepath,
             &cts_dev->pdata->ts_input_dev->dev, curr_version);
     }
@@ -727,13 +727,20 @@ const struct cts_firmware *cts_request_firmware(const struct cts_device *cts_dev
 #ifndef CFG_CTS_FOR_GKI
     if (is_filesystem_mounted(CFG_CTS_FIRMWARE_FILEPATH))
 #endif
+    {
+        const char *filepath = NULL;
+
+        if (cts_dev && cts_dev->config_fw_name[0] != '\0')
+            filepath = cts_dev->config_fw_name;
+        else if (g_cts_data && g_cts_data->config_fw_name && g_cts_data->config_fw_name[0] != '\0')
+            filepath = g_cts_data->config_fw_name;
+        else
+            filepath = CFG_CTS_FIRMWARE_FILENAME;
+
         firmware_from_file = cts_request_newer_firmware_from_fs(cts_dev,
-#ifdef CFG_CTS_FW_UPDATE_FILE_LOAD
-        cts_dev->config_fw_name[0] ? cts_dev->config_fw_name : CFG_CTS_FIRMWARE_FILENAME,
-#else
-        g_cts_data->config_fw_name,/*CFG_CTS_FIRMWARE_FILENAME,*/
-#endif
-        firmware_builtin ? FIRMWARE_VERSION(firmware_builtin) : curr_firmware_ver);
+            filepath,
+            firmware_builtin ? FIRMWARE_VERSION(firmware_builtin) : curr_firmware_ver);
+    }
 #endif /* CFG_CTS_FIRMWARE_IN_FS */
 
     return firmware_from_file ? firmware_from_file : firmware_builtin;

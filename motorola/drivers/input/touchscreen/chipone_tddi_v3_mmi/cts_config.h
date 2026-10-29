@@ -62,15 +62,19 @@
 #define CFG_CTS_FIRMWARE_IN_FS
 #ifdef CFG_CTS_FIRMWARE_IN_FS
 /* Add FW custom process. */
-/* #define CFG_CTS_FW_UPDATE_SYS */
+#define CFG_CTS_FW_UPDATE_SYS
 
 /* Load config fw bin as default. */
-/* #define CFG_CTS_FW_UPDATE_FILE_LOAD  */
-#ifdef CFG_CTS_FW_UPDATE_FILE_LOAD
+#define CFG_CTS_FW_UPDATE_FILE_LOAD
+#ifndef CFG_CTS_FW_FILE_NAME_MAX_LEN
 #define CFG_CTS_FW_FILE_NAME_MAX_LEN        128
+#endif
+#ifndef CFG_CTS_FW_FILE_PATH
 #define CFG_CTS_FW_FILE_PATH                "/vendor/firmware/"
+#endif
+#ifndef CFG_CTS_FW_FILE_NAME_VENDOR
 #define CFG_CTS_FW_FILE_NAME_VENDOR         "chipone"
-#endif /*CFG_CTS_FW_UPDATE_FILE_LOAD */
+#endif
 
 #define CFG_CTS_FIRMWARE_FILENAME           "chipone_firmware.bin"
 #define CFG_CTS_FIRMWARE_FILEPATH           "/vendor/firmware/chipone_firmware.bin"
@@ -155,7 +159,9 @@
 /* #define CONFIG_CTS_TP_PROXIMITY */
 
 /* ESD protection */
+#ifndef CONFIG_CTS_ESD_PROTECTION
 #define CONFIG_CTS_ESD_PROTECTION
+#endif
 #ifdef CONFIG_CTS_ESD_PROTECTION
 #define CFG_CTS_ESD_PROTECTION_CHECK_PERIOD   (2 * HZ)
 #define CFG_CTS_ESD_FAILED_CONFIRM_CNT        3

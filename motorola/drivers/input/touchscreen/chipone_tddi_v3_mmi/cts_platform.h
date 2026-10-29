@@ -107,9 +107,7 @@ struct cts_platform_data {
     u8 vkey_keycodes[CFG_CTS_MAX_VKEY_NUM];
 #endif
 
-#ifdef CFG_CTS_FW_UPDATE_SYS
     const char *panel_supplier;
-#endif
     u32 build_id;
     u32 config_id;
 

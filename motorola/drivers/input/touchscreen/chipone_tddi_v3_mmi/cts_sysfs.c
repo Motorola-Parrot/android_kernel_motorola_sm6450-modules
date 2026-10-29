@@ -115,11 +115,19 @@ static bool is_reflash_filename_valid(const struct chipone_ts_data *cts_data,
 {
     char prefix[CFG_CTS_FW_FILE_NAME_MAX_LEN];
 
-    if (cts_data->pdata->panel_supplier != NULL) {
+    if (!cts_data || !filename)
+        return false;
+
+    if (cts_data->config_fw_name && cts_data->config_fw_name[0] != '\0' &&
+        strstr(filename, cts_data->config_fw_name)) {
+        return true;
+    }
+
+    if (cts_data->pdata && cts_data->pdata->panel_supplier != NULL) {
         snprintf(prefix, sizeof(prefix), "%s-%s-%s-",
                 CFG_CTS_FW_FILE_NAME_VENDOR,
                 cts_data->pdata->panel_supplier,
-                cts_data->cts_dev.hwdata->name);
+                cts_data->cts_dev.hwdata ? cts_data->cts_dev.hwdata->name : "");
     } else {
         /* panel supplier not set, just check vendor. */
         snprintf(prefix, sizeof(prefix), "%s",
